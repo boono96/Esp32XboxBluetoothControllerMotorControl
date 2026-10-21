@@ -1,0 +1,156 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 830" font-family="Segoe UI, Arial, sans-serif">
+  <rect width="1200" height="830" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="600" y="38" text-anchor="middle" font-size="24" font-weight="bold" fill="#1e293b">ESP32 + 2x Cytron MD10C — Differential Drive Wiring (20 kHz sign-magnitude)</text>
+  <text x="600" y="62" text-anchor="middle" font-size="13" font-style="italic" fill="#475569">Sign-magnitude: PWM = magnitude · DIR = sign · 0% = coast</text>
+
+  <!-- ================= Gamepad ================= -->
+  <rect x="150" y="72" width="180" height="92" rx="20" fill="#e2e8f0" stroke="#334155" stroke-width="2"/>
+  <circle cx="185" cy="142" r="17" fill="#cbd5e1" stroke="#334155" stroke-width="2"/>
+  <circle cx="295" cy="142" r="17" fill="#cbd5e1" stroke="#334155" stroke-width="2"/>
+  <text x="240" y="106" text-anchor="middle" font-size="13" font-weight="bold" fill="#1e293b">Xbox-style gamepad</text>
+  <text x="240" y="122" text-anchor="middle" font-size="12" fill="#475569">(HyperX / Xbox)</text>
+
+  <!-- Bluetooth link -->
+  <path d="M 240 164 L 218 320" stroke="#2563eb" stroke-width="2.5" stroke-dasharray="7 5" fill="none"/>
+  <path d="M 262 268 Q 276 282 272 302" stroke="#2563eb" stroke-width="2" fill="none"/>
+  <path d="M 272 252 Q 294 274 288 304" stroke="#2563eb" stroke-width="2" fill="none"/>
+  <text x="300" y="240" font-size="12" font-style="italic" fill="#2563eb">Bluetooth</text>
+
+  <!-- ================= Wires (signals) ================= -->
+  <!-- 3V3 logic supply (red) -->
+  <g stroke="#dc2626" stroke-width="3" fill="none">
+    <path d="M 300 360 H 340"/>
+    <path d="M 340 360 V 350 H 560"/>
+    <path d="M 340 360 V 630 H 560"/>
+  </g>
+  <!-- GND logic (black) -->
+  <g stroke="#111111" stroke-width="3" fill="none">
+    <path d="M 300 400 H 370"/>
+    <path d="M 370 400 V 310 H 560"/>
+    <path d="M 370 400 V 590 H 560"/>
+  </g>
+  <!-- PWM signals (orange) -->
+  <g stroke="#f59e0b" stroke-width="3" fill="none">
+    <path d="M 300 440 H 460 V 230 H 560"/>
+    <path d="M 300 520 H 540 V 510 H 560"/>
+  </g>
+  <!-- DIR signals (green) -->
+  <g stroke="#16a34a" stroke-width="3" fill="none">
+    <path d="M 300 480 H 490 V 270 H 560"/>
+    <path d="M 300 560 H 555 V 550 H 560"/>
+  </g>
+  <!-- Battery power -->
+  <g stroke="#b91c1c" stroke-width="5" fill="none">
+    <path d="M 790 220 H 960 V 690"/>
+    <path d="M 790 500 H 960"/>
+  </g>
+  <g stroke="#374151" stroke-width="5" fill="none">
+    <path d="M 790 260 H 1000 V 690"/>
+    <path d="M 790 540 H 1000"/>
+  </g>
+  <!-- Motor output wires -->
+  <g stroke="#334155" stroke-width="3" fill="none">
+    <path d="M 790 300 H 850"/>
+    <path d="M 790 340 H 850"/>
+    <path d="M 790 590 H 850"/>
+    <path d="M 790 630 H 850"/>
+  </g>
+
+  <!-- Junction dots -->
+  <circle cx="340" cy="360" r="5" fill="#dc2626"/>
+  <circle cx="370" cy="400" r="5" fill="#111111"/>
+  <circle cx="960" cy="510" r="5" fill="#b91c1c"/>
+
+  <!-- Terminal dots -->
+  <g>
+    <circle cx="300" cy="360" r="4" fill="#dc2626"/><circle cx="300" cy="400" r="4" fill="#111111"/>
+    <circle cx="300" cy="440" r="4" fill="#f59e0b"/><circle cx="300" cy="480" r="4" fill="#16a34a"/>
+    <circle cx="300" cy="520" r="4" fill="#f59e0b"/><circle cx="300" cy="560" r="4" fill="#16a34a"/>
+    <circle cx="560" cy="350" r="4" fill="#dc2626"/><circle cx="560" cy="310" r="4" fill="#111111"/>
+    <circle cx="560" cy="270" r="4" fill="#16a34a"/><circle cx="560" cy="230" r="4" fill="#f59e0b"/>
+    <circle cx="560" cy="630" r="4" fill="#dc2626"/><circle cx="560" cy="590" r="4" fill="#111111"/>
+    <circle cx="560" cy="550" r="4" fill="#16a34a"/><circle cx="560" cy="510" r="4" fill="#f59e0b"/>
+    <circle cx="790" cy="220" r="4" fill="#b91c1c"/><circle cx="790" cy="260" r="4" fill="#374151"/>
+    <circle cx="790" cy="500" r="4" fill="#b91c1c"/><circle cx="790" cy="540" r="4" fill="#374151"/>
+    <circle cx="960" cy="690" r="5" fill="#b91c1c"/><circle cx="1000" cy="690" r="5" fill="#374151"/>
+  </g>
+
+  <!-- ================= ESP32 board ================= -->
+  <rect x="140" y="320" width="160" height="380" rx="10" fill="#2d3748" stroke="#0f172a" stroke-width="2"/>
+  <text x="220" y="352" text-anchor="middle" font-size="15" font-weight="bold" fill="#ffffff">ESP32 DevKit</text>
+  <text x="220" y="368" text-anchor="middle" font-size="11" fill="#cbd5e1">(WROOM-32)</text>
+  <text x="292" y="365" text-anchor="end" font-size="13" font-weight="bold" fill="#dc2626">3V3</text>
+  <text x="292" y="405" text-anchor="end" font-size="13" font-weight="bold" fill="#ffffff">GND</text>
+  <text x="292" y="445" text-anchor="end" font-size="13" font-weight="bold" fill="#fbbf24">GPIO25</text>
+  <text x="292" y="485" text-anchor="end" font-size="13" font-weight="bold" fill="#86efac">GPIO26</text>
+  <text x="292" y="525" text-anchor="end" font-size="13" font-weight="bold" fill="#fbbf24">GPIO32</text>
+  <text x="292" y="565" text-anchor="end" font-size="13" font-weight="bold" fill="#86efac">GPIO33</text>
+  <rect x="180" y="660" width="80" height="14" rx="4" fill="#94a3b8"/>
+  <text x="220" y="716" text-anchor="middle" font-size="11" fill="#475569">USB (power + programming)</text>
+
+  <!-- ================= MD10C LEFT ================= -->
+  <rect x="560" y="190" width="230" height="200" rx="8" fill="#f1f5f9" stroke="#334155" stroke-width="2.5"/>
+  <text x="675" y="212" text-anchor="middle" font-size="14" font-weight="bold" fill="#1e293b">MD10C #1 — LEFT</text>
+  <text x="572" y="234" font-size="13" font-weight="bold" fill="#b45309">PWM</text>
+  <text x="572" y="274" font-size="13" font-weight="bold" fill="#15803d">DIR</text>
+  <text x="572" y="314" font-size="13" font-weight="bold" fill="#111111">GND</text>
+  <text x="572" y="354" font-size="13" font-weight="bold" fill="#dc2626">VCC</text>
+  <text x="778" y="224" text-anchor="end" font-size="13" font-weight="bold" fill="#b91c1c">VM+</text>
+  <text x="778" y="264" text-anchor="end" font-size="13" font-weight="bold" fill="#374151">GND</text>
+  <text x="778" y="304" text-anchor="end" font-size="13" font-weight="bold" fill="#334155">M1A</text>
+  <text x="778" y="344" text-anchor="end" font-size="13" font-weight="bold" fill="#334155">M1B</text>
+  <text x="675" y="378" text-anchor="middle" font-size="11" font-style="italic" fill="#64748b">jumper: factory (PWM+DIR)</text>
+
+  <!-- ================= MD10C RIGHT ================= -->
+  <rect x="560" y="470" width="230" height="200" rx="8" fill="#f1f5f9" stroke="#334155" stroke-width="2.5"/>
+  <text x="675" y="492" text-anchor="middle" font-size="14" font-weight="bold" fill="#1e293b">MD10C #2 — RIGHT</text>
+  <text x="572" y="514" font-size="13" font-weight="bold" fill="#b45309">PWM</text>
+  <text x="572" y="554" font-size="13" font-weight="bold" fill="#15803d">DIR</text>
+  <text x="572" y="594" font-size="13" font-weight="bold" fill="#111111">GND</text>
+  <text x="572" y="634" font-size="13" font-weight="bold" fill="#dc2626">VCC</text>
+  <text x="778" y="504" text-anchor="end" font-size="13" font-weight="bold" fill="#b91c1c">VM+</text>
+  <text x="778" y="544" text-anchor="end" font-size="13" font-weight="bold" fill="#374151">GND</text>
+  <text x="778" y="594" text-anchor="end" font-size="13" font-weight="bold" fill="#334155">M2A</text>
+  <text x="778" y="634" text-anchor="end" font-size="13" font-weight="bold" fill="#334155">M2B</text>
+  <text x="675" y="658" text-anchor="middle" font-size="11" font-style="italic" fill="#64748b">jumper: factory (PWM+DIR)</text>
+
+  <!-- ================= Motors ================= -->
+  <circle cx="885" cy="320" r="45" fill="#ffffff" stroke="#334155" stroke-width="3"/>
+  <text x="885" y="316" text-anchor="middle" font-size="13" font-weight="bold" fill="#1e293b">MOTOR L</text>
+  <text x="885" y="333" text-anchor="middle" font-size="10" fill="#64748b">DC brushed</text>
+  <circle cx="885" cy="610" r="45" fill="#ffffff" stroke="#334155" stroke-width="3"/>
+  <text x="885" y="606" text-anchor="middle" font-size="13" font-weight="bold" fill="#1e293b">MOTOR R</text>
+  <text x="885" y="623" text-anchor="middle" font-size="10" fill="#64748b">DC brushed</text>
+
+  <!-- ================= Battery ================= -->
+  <rect x="860" y="690" width="220" height="70" rx="8" fill="#fef9c3" stroke="#a16207" stroke-width="2.5"/>
+  <text x="970" y="720" text-anchor="middle" font-size="14" font-weight="bold" fill="#1e293b">Battery 7–35 V</text>
+  <text x="970" y="740" text-anchor="middle" font-size="11" fill="#64748b">Vmotor supply (MD10C power side)</text>
+  <text x="947" y="680" text-anchor="end" font-size="12" font-weight="bold" fill="#b91c1c">+</text>
+  <text x="1013" y="680" text-anchor="start" font-size="12" font-weight="bold" fill="#374151">−</text>
+
+  <!-- ================= Legend ================= -->
+  <rect x="140" y="725" width="420" height="90" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+  <g stroke-width="3">
+    <line x1="155" y1="745" x2="185" y2="745" stroke="#f59e0b"/>
+    <line x1="155" y1="765" x2="185" y2="765" stroke="#16a34a"/>
+    <line x1="155" y1="785" x2="185" y2="785" stroke="#dc2626"/>
+    <line x1="155" y1="805" x2="185" y2="805" stroke="#111111"/>
+    <line x1="355" y1="745" x2="385" y2="745" stroke="#b91c1c" stroke-width="5"/>
+    <line x1="355" y1="765" x2="385" y2="765" stroke="#374151" stroke-width="5"/>
+    <line x1="355" y1="785" x2="385" y2="785" stroke="#2563eb" stroke-dasharray="7 5"/>
+  </g>
+  <text x="195" y="749" font-size="12" fill="#1e293b">PWM signal (20 kHz)</text>
+  <text x="195" y="769" font-size="12" fill="#1e293b">DIR signal (direction)</text>
+  <text x="195" y="789" font-size="12" fill="#1e293b">3.3 V logic supply</text>
+  <text x="195" y="809" font-size="12" fill="#1e293b">GND — logic (input side)</text>
+  <text x="395" y="749" font-size="12" fill="#1e293b">Battery + (Vmotor)</text>
+  <text x="395" y="769" font-size="12" fill="#1e293b">Battery − (power GND)</text>
+  <text x="395" y="789" font-size="12" fill="#1e293b">Bluetooth radio link</text>
+
+  <!-- ================= Notes ================= -->
+  <text x="580" y="785" font-size="12" fill="#475569">Note 1: input side is opto-isolated — ESP32 GND goes to MD10C input GND, battery − to MD10C power GND.</text>
+  <text x="580" y="805" font-size="12" fill="#475569">Note 2: MD10C VCC ← ESP32 3V3 (Rev2+ inputs are 3.3 V tolerant). Do not use ANTIPHASE jumper position.</text>
+</svg>
