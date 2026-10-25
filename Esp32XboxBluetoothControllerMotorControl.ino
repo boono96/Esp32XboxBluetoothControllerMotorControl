@@ -1,37 +1,31 @@
 /*
  * ESP32 differential-drive robot
- *   Controller : Xbox-protocol Bluetooth gamepad (HyperX / Xbox / Xbox-style pads)
- *   Drivers    : 2x Cytron MD10C (10 A) in factory sign-magnitude mode (PWM + DIR)
- *   PWM        : 20 kHz, 11-bit resolution (the maximum the ESP32 LEDC can do at 20 kHz,
- *                since 80 MHz / 20 kHz = 4000 counts < 2^12)
+ *   Receiver : FlySky AFHDS receiver with serial IBUS output (FS-iA6B, FS-iA10B, ...)
+ *   Drivers  : 2x Cytron MD10C (10 A) in factory sign-magnitude mode (PWM + DIR)
+ *   PWM      : 20 kHz, 11-bit resolution (the maximum the ESP32 LEDC can do at 20 kHz,
+ *              since 80 MHz / 20 kHz = 4000 counts < 2^12)
  *
- * Drive layout (split sticks):
- *   Left  stick Y -> throttle (forward / reverse)
- *   Right stick X -> steering (left / right)
+ * Drive layout (FlySky Mode 2 transmitter defaults):
+ *   CH1 (right stick X) -> steering (left / right)
+ *   CH3 (left stick Y)  -> throttle (forward / reverse)
+ *   Channel numbers can be remapped with STEERING_CH / THROTTLE_CH below.
  *
- * ---- Bluepad32 setup (Arduino IDE) ----
- *   1. File > Preferences > Additional Boards Manager URLs, add:
- *      https://raw.githubusercontent.com/ricardoquesada/espressif-arduino-bluepad32-static/refs/heads/main/package_esp32_bluepad32_index.json
- *   2. Boards Manager: install the "esp32" package by Bluepad32 Contributors
- *   3. Select your board under that package (e.g. "ESP32 Dev Module")
- *   4. LEDC API is auto-selected at compile time: arduino-esp32 core 2.x
- *      (the Bluepad32 board package, v4.0.2) uses ledcSetup/ledcAttachPin;
- *      core 3.x uses ledcAttach.
+ * ---- Wiring (FlySky receiver) ----
+ *   Receiver 5V  <- 5 V BEC / battery pack (FS-iA6B accepts 4-8.4 V; NOT the ESP32 3V3 pin)
+ *   Receiver GND -> ESP32 GND (common ground)
+ *   Receiver I-BUS (SERVO) pin -> ESP32 GPIO 16 (RX2); IBUS is ~3.3 V logic, connect directly
+ *   Use the I-BUS SERVO pin (I-BUS SENS is the telemetry pin, not servo data).
  *
- * ---- Wiring (each MD10C) ----
- *   MD10C PWM <- ESP32 PWM pin (see pins below)
- *   MD10C DIR <- ESP32 DIR pin
- *   MD10C GND -> ESP32 GND (common ground, opto input side)
- *   MD10C VCC <- ESP32 3V3 (MD10C Rev2+ inputs are 3.3 V tolerant)
- *   Leave the MD10C mode jumper in the factory position (PWM+DIR), NOT "ANTIPHASE".
- *   Sign-magnitude on this driver: duty = magnitude, DIR = sign, 0 % = coast.
+ * ---- IBUS protocol ----
+ *   115200 baud 8N1, one 32-byte frame every ~7 ms:
+ *   [0]=0x20 [1]=0x40, 14 channels as little-endian uint16 (1000-2000, center 1500),
+ *   last 2 bytes = 16-bit checksum (0xFFFF - sum of the first 30 bytes).
  *
- * Pairing: put the pad in Bluetooth pairing mode (Xbox button + pair button,
- * lights flashing). Bluepad32 connects automatically. HyperX pads that follow
- * the Xbox wireless protocol show up as Xbox controllers.
+ * Failsafe: the sketch stops the motors if no valid frame arrives for PACKET_TIMEOUT_MS.
+ * Also set channel failsafes on the transmitter (center = 1500) so a TX loss holds the
+ * sticks at neutral even on receivers that keep outputting held frames.
  */
 
-#include <Bluepad32.h>
 #include <esp_arduino_version.h>  // ESP_ARDUINO_VERSION_MAJOR (LEDC API selection)
 
 // ---------------- Pins ----------------
@@ -39,20 +33,27 @@ constexpr int LEFT_PWM_PIN  = 25;
 constexpr int LEFT_DIR_PIN  = 26;
 constexpr int RIGHT_PWM_PIN = 32;
 constexpr int RIGHT_DIR_PIN = 33;
+constexpr int IBUS_RX_PIN   = 16;  // ESP32 UART2 RX <- receiver I-BUS pin
 
 // ---------------- PWM ----------------
 constexpr uint32_t PWM_FREQ_HZ  = 20000;
 constexpr uint8_t  PWM_RES_BITS = 11;
 constexpr uint32_t PWM_MAX      = (1u << PWM_RES_BITS) - 1;  // 2047
 
+// ---------------- IBUS ----------------
+constexpr uint32_t IBUS_BAUD = 115200;
+
+// Channel map, 0-indexed: CH1 = right stick X (steering), CH3 = left stick Y (throttle).
+constexpr int STEERING_CH = 0;  // CH1
+constexpr int THROTTLE_CH = 2;  // CH3
+
 // ---------------- Tuning ----------------
 constexpr float DEADZONE          = 0.08f;  // stick idle band, 0..1
 constexpr float EXPO              = 1.6f;   // >1 = softer around center, 1.0 = linear
 constexpr float SLEW_PER_SEC      = 6.0f;   // max output change per second (6 = 0->full in ~170 ms)
-constexpr uint32_t PACKET_TIMEOUT_MS = 300; // no packets for this long -> failsafe stop
+constexpr uint32_t PACKET_TIMEOUT_MS = 300; // no valid IBUS frame for this long -> failsafe stop
 
-// Bluepad32 follows the SDL convention (stick up / left = negative).
-constexpr float AXIS_Y_INVERT = -1.0f;  // flip if throttle is backwards
+constexpr float AXIS_Y_INVERT = +1.0f;  // RC: stick up = high pulse = forward. Flip if backwards
 constexpr float AXIS_X_INVERT = +1.0f;  // flip if steering is backwards
 
 struct Motor {
@@ -66,12 +67,11 @@ struct Motor {
 Motor leftMotor  = { LEFT_PWM_PIN,  0, LEFT_DIR_PIN,  false, 0.0f };
 Motor rightMotor = { RIGHT_PWM_PIN, 1, RIGHT_DIR_PIN, false, 0.0f };
 
-ControllerPtr myController;
 uint32_t lastPacketMs = 0;
 
 // ---------------- PWM helpers ----------------
-// arduino-esp32 core 2.x (Bluepad32 board package) configures LEDC per channel;
-// core 3.x attaches per pin. Both produce the same 20 kHz / 11-bit output.
+// arduino-esp32 core 2.x configures LEDC per channel; core 3.x attaches per pin.
+// Both produce the same 20 kHz / 11-bit output.
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
 void pwmBegin(const Motor& m) {
   if (!ledcAttach(m.pwmPin, PWM_FREQ_HZ, PWM_RES_BITS)) {
@@ -117,18 +117,56 @@ void driveMotor(Motor& m, float target, float dt) {
   pwmWrite(m, duty);
 }
 
-// ---------------- Bluepad32 callbacks ----------------
-void onConnected(ControllerPtr ctl) {
-  if (myController) return;  // only one driver at a time
-  myController = ctl;
-  ctl->setPlayerLEDs(0x01);
-  ctl->playDualRumble(0, 150, 0x40, 0x80);
-  Serial.printf("Controller connected: %s\n", String(ctl->getModelName()).c_str());
+// ---------------- IBUS (FlySky serial receiver) ----------------
+HardwareSerial ibusSerial(2);  // UART2
+
+constexpr uint8_t  IBUS_FRAME_LEN = 32;
+constexpr uint8_t  IBUS_NUM_CH    = 14;
+
+uint8_t  ibusBuf[IBUS_FRAME_LEN];
+uint8_t  ibusPos = 0;
+uint16_t ibusCh[IBUS_NUM_CH] = {0};
+
+void ibusBegin() {
+  ibusSerial.begin(IBUS_BAUD, SERIAL_8N1, IBUS_RX_PIN, -1);
 }
 
-void onDisconnected(ControllerPtr ctl) {
-  if (ctl == myController) myController = nullptr;
-  Serial.println("Controller disconnected");
+bool ibusFrameOk() {
+  if (ibusBuf[0] != 0x20 || ibusBuf[1] != 0x40) return false;
+  uint16_t sum = 0;
+  for (uint8_t i = 0; i < IBUS_FRAME_LEN - 2; i++) sum += ibusBuf[i];
+  uint16_t chk = ibusBuf[30] | (ibusBuf[31] << 8);
+  return (uint16_t)(0xFFFF - sum) == chk;
+}
+
+bool ibusChannelsOk() {
+  for (uint8_t i = 0; i < IBUS_NUM_CH; i++) {
+    if (ibusCh[i] < 900 || ibusCh[i] > 2100) return false;
+  }
+  return true;
+}
+
+// Returns true once per complete, checksum-valid frame. A rejected frame
+// (misaligned stream or corrupted bytes) resyncs on a later header+checksum.
+bool ibusUpdate() {
+  bool fresh = false;
+  while (ibusSerial.available()) {
+    ibusBuf[ibusPos++] = ibusSerial.read();
+    if (ibusPos < IBUS_FRAME_LEN) continue;
+    ibusPos = 0;
+    if (ibusFrameOk()) {
+      for (uint8_t i = 0; i < IBUS_NUM_CH; i++) {
+        ibusCh[i] = ibusBuf[2 + 2 * i] | (ibusBuf[3 + 2 * i] << 8);
+      }
+      if (ibusChannelsOk()) fresh = true;
+    }
+  }
+  return fresh;
+}
+
+// IBUS channel value 1000..2000 (center 1500) -> -1..+1
+float channelToAxis(int ch) {
+  return constrain((float)(ibusCh[ch] - 1500) / 500.0f, -1.0f, 1.0f);
 }
 
 // ---------------- Debug ----------------
@@ -137,23 +175,21 @@ void debugPrint(uint32_t now, bool alive, float l, float r) {
   if (now - lastPrint < 250) return;
   lastPrint = now;
   if (!alive) {
-    Serial.println("waiting for controller / packet timeout -> motors stopped");
+    Serial.println("no IBUS frames -> motors stopped (TX on? bound? wired to GPIO16?)");
     return;
   }
-  Serial.printf("L %+0.2f  R %+0.2f\n", l, r);
+  Serial.printf("CH1 %4u  CH2 %4u  CH3 %4u  CH4 %4u  |  L %+0.2f  R %+0.2f\n",
+                ibusCh[0], ibusCh[1], ibusCh[2], ibusCh[3], l, r);
 }
 
 // ---------------- Arduino ----------------
 void setup() {
   Serial.begin(115200);
-//   Serial.println("ESP32 diff-drive, 20 kHz sign-magnitude (Bluepad32)");
 
   motorBegin(leftMotor);
   motorBegin(rightMotor);
 
-  BP32.setup(&onConnected, &onDisconnected);
-  BP32.forgetBluetoothKeys();  // clears stale pairings; comment out after first successful pairing
-  BP32.enableVirtualDevice(false);
+  ibusBegin();
 }
 
 void loop() {
@@ -163,16 +199,14 @@ void loop() {
   lastMs = now;
   if (dt <= 0.0f || dt > 0.5f) dt = 0.001f;
 
-  bool fresh = BP32.update();
-  if (fresh) lastPacketMs = now;
+  if (ibusUpdate()) lastPacketMs = now;
 
-  bool alive = myController && myController->isConnected() &&
-               (now - lastPacketMs <= PACKET_TIMEOUT_MS);
+  bool alive = (now - lastPacketMs <= PACKET_TIMEOUT_MS);
 
   float throttle = 0.0f, steering = 0.0f;
   if (alive) {
-    throttle = shapeAxis(AXIS_Y_INVERT * myController->axisY() / 512.0f);
-    steering = shapeAxis(AXIS_X_INVERT * myController->axisRX() / 512.0f);
+    throttle = shapeAxis(AXIS_Y_INVERT * channelToAxis(THROTTLE_CH));
+    steering = shapeAxis(AXIS_X_INVERT * channelToAxis(STEERING_CH));
   }
 
   // Arcade mix with normalization so the sum never exceeds full scale.
