@@ -33,9 +33,27 @@ Drives a two-wheel differential-drive robot from an Xbox-protocol Bluetooth game
 2. **Boards Manager** — install the `esp32` package by *Bluepad32 Contributors*.
 3. Select your board under that package (e.g. *ESP32 Dev Module*).
 4. Open `Esp32XboxBluetoothControllerMotorControl.ino` and upload.
-   - Requires arduino-esp32 core v3.x (uses the `ledcAttach` API).
-   - On core 2.x, replace with `ledcSetup(ch, PWM_FREQ_HZ, PWM_RES_BITS)` + `ledcAttachPin(pin, ch)` + `ledcWrite(ch, duty)`.
+   - Works on arduino-esp32 core 2.x (what the Bluepad32 board package is built
+     on) and 3.x — the correct LEDC API is selected automatically at compile time.
 5. Open **Serial Monitor at 115200** to see status.
+
+### PlatformIO alternative
+
+`Esp32Controller/` is a ready-to-build PlatformIO project using a PIO-compatible
+build of the Bluepad32 board package (arduino-esp32 core 2.0.x + Bluepad32 v4.0.2):
+
+```ini
+[env:upesy_wroom]
+platform = espressif32
+board = upesy_wroom
+framework = arduino
+monitor_speed = 115200
+platform_packages =
+    framework-arduinoespressif32@https://github.com/maxgerhardt/pio-framework-bluepad32/archive/refs/heads/main.zip
+```
+
+Sketch: `Esp32Controller/src/Esp32XboxBluetoothControllerMotorControl.ino` —
+build with `pio run`, upload with `pio run -t upload`, serial monitor with `pio device monitor`.
 
 **Pairing:** put the pad in Bluetooth pairing mode (hold Xbox button + pair button until the lights flash). Bluepad32 connects automatically; the pad gets player LED 1 and a short rumble on connect.
 

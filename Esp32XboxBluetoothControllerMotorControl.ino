@@ -14,9 +14,9 @@
  *      https://raw.githubusercontent.com/ricardoquesada/espressif-arduino-bluepad32-static/refs/heads/main/package_esp32_bluepad32_index.json
  *   2. Boards Manager: install the "esp32" package by Bluepad32 Contributors
  *   3. Select your board under that package (e.g. "ESP32 Dev Module")
- *   4. Sketch uses the arduino-esp32 v3.x LEDC API (ledcAttach).
- *      On core 2.x instead use: ledcSetup(ch, PWM_FREQ_HZ, PWM_RES_BITS) +
- *      ledcAttachPin(pin, ch) + ledcWrite(ch, duty).
+ *   4. LEDC API is auto-selected at compile time: arduino-esp32 core 2.x
+ *      (the Bluepad32 board package, v4.0.2) uses ledcSetup/ledcAttachPin;
+ *      core 3.x uses ledcAttach.
  *
  * ---- Wiring (each MD10C) ----
  *   MD10C PWM <- ESP32 PWM pin (see pins below)
@@ -32,6 +32,7 @@
  */
 
 #include <Bluepad32.h>
+#include <esp_arduino_version.h>  // ESP_ARDUINO_VERSION_MAJOR (LEDC API selection)
 
 // ---------------- Pins ----------------
 constexpr int LEFT_PWM_PIN  = 25;
@@ -55,26 +56,44 @@ constexpr float AXIS_Y_INVERT = -1.0f;  // flip if throttle is backwards
 constexpr float AXIS_X_INVERT = +1.0f;  // flip if steering is backwards
 
 struct Motor {
-  int   pwmPin;
-  int   dirPin;
-  bool  dirInvert;  // flip if one wheel spins the wrong way
-  float out;        // slewed output, -1..1
+  int     pwmPin;
+  uint8_t pwmCh;     // LEDC channel (core 2.x only; ignored on core 3.x)
+  int     dirPin;
+  bool    dirInvert; // flip if one wheel spins the wrong way
+  float   out;       // slewed output, -1..1
 };
 
-Motor leftMotor  = { LEFT_PWM_PIN,  LEFT_DIR_PIN,  false, 0.0f };
-Motor rightMotor = { RIGHT_PWM_PIN, RIGHT_DIR_PIN, false, 0.0f };
+Motor leftMotor  = { LEFT_PWM_PIN,  0, LEFT_DIR_PIN,  false, 0.0f };
+Motor rightMotor = { RIGHT_PWM_PIN, 1, RIGHT_DIR_PIN, false, 0.0f };
 
 ControllerPtr myController;
 uint32_t lastPacketMs = 0;
+
+// ---------------- PWM helpers ----------------
+// arduino-esp32 core 2.x (Bluepad32 board package) configures LEDC per channel;
+// core 3.x attaches per pin. Both produce the same 20 kHz / 11-bit output.
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+void pwmBegin(const Motor& m) {
+  if (!ledcAttach(m.pwmPin, PWM_FREQ_HZ, PWM_RES_BITS)) {
+    Serial.printf("ledcAttach failed on pin %d\n", m.pwmPin);
+  }
+  ledcWrite(m.pwmPin, 0);
+}
+void pwmWrite(const Motor& m, uint32_t duty) { ledcWrite(m.pwmPin, duty); }
+#else
+void pwmBegin(const Motor& m) {
+  ledcSetup(m.pwmCh, PWM_FREQ_HZ, PWM_RES_BITS);
+  ledcAttachPin(m.pwmPin, m.pwmCh);
+  ledcWrite(m.pwmCh, 0);
+}
+void pwmWrite(const Motor& m, uint32_t duty) { ledcWrite(m.pwmCh, duty); }
+#endif
 
 // ---------------- Motor helpers ----------------
 void motorBegin(const Motor& m) {
   pinMode(m.dirPin, OUTPUT);
   digitalWrite(m.dirPin, LOW);
-  if (!ledcAttach(m.pwmPin, PWM_FREQ_HZ, PWM_RES_BITS)) {
-    Serial.printf("ledcAttach failed on pin %d\n", m.pwmPin);
-  }
-  ledcWrite(m.pwmPin, 0);
+  pwmBegin(m);
 }
 
 // Deadzone with rescale (full stick still = full output) + expo curve.
@@ -95,7 +114,7 @@ void driveMotor(Motor& m, float target, float dt) {
   bool forward = (m.out >= 0.0f) != m.dirInvert;
   digitalWrite(m.dirPin, forward ? HIGH : LOW);
   uint32_t duty = (uint32_t)(fabsf(m.out) * PWM_MAX + 0.5f);
-  ledcWrite(m.pwmPin, duty);
+  pwmWrite(m, duty);
 }
 
 // ---------------- Bluepad32 callbacks ----------------
@@ -127,7 +146,7 @@ void debugPrint(uint32_t now, bool alive, float l, float r) {
 // ---------------- Arduino ----------------
 void setup() {
   Serial.begin(115200);
-  Serial.println("ESP32 diff-drive, 20 kHz sign-magnitude (Bluepad32)");
+//   Serial.println("ESP32 diff-drive, 20 kHz sign-magnitude (Bluepad32)");
 
   motorBegin(leftMotor);
   motorBegin(rightMotor);
@@ -152,8 +171,8 @@ void loop() {
 
   float throttle = 0.0f, steering = 0.0f;
   if (alive) {
-    throttle = shapeAxis(AXIS_Y_INVERT * myController->aY() / 512.0f);
-    steering = shapeAxis(AXIS_X_INVERT * myController->bX() / 512.0f);
+    throttle = shapeAxis(AXIS_Y_INVERT * myController->axisY() / 512.0f);
+    steering = shapeAxis(AXIS_X_INVERT * myController->axisRX() / 512.0f);
   }
 
   // Arcade mix with normalization so the sum never exceeds full scale.
