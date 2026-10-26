@@ -5,9 +5,9 @@
  *   PWM      : 20 kHz, 11-bit resolution (the maximum the ESP32 LEDC can do at 20 kHz,
  *              since 80 MHz / 20 kHz = 4000 counts < 2^12)
  *
- * Drive layout (FlySky Mode 2 transmitter defaults):
- *   CH1 (right stick X) -> steering (left / right)
- *   CH3 (left stick Y)  -> throttle (forward / reverse)
+ * Drive layout (FlySky Mode 2 transmitter, throttle/steering channels swapped):
+ *   CH1 (right stick X) -> throttle (forward / reverse)
+ *   CH3 (left stick Y)  -> steering (left / right)
  *   Channel numbers can be remapped with STEERING_CH / THROTTLE_CH below.
  *
  * ---- Wiring (FlySky receiver) ----
@@ -43,9 +43,9 @@ constexpr uint32_t PWM_MAX      = (1u << PWM_RES_BITS) - 1;  // 2047
 // ---------------- IBUS ----------------
 constexpr uint32_t IBUS_BAUD = 115200;
 
-// Channel map, 0-indexed: CH1 = right stick X (steering), CH3 = left stick Y (throttle).
-constexpr int STEERING_CH = 0;  // CH1
-constexpr int THROTTLE_CH = 2;  // CH3
+// Channel map, 0-indexed: CH1 = right stick X (throttle), CH3 = left stick Y (steering).
+constexpr int STEERING_CH = 2;  // CH3
+constexpr int THROTTLE_CH = 0;  // CH1
 
 // ---------------- Tuning ----------------
 constexpr float DEADZONE          = 0.08f;  // stick idle band, 0..1
@@ -132,7 +132,6 @@ void ibusBegin() {
 }
 
 bool ibusFrameOk() {
-  if (ibusBuf[0] != 0x20 || ibusBuf[1] != 0x40) return false;
   uint16_t sum = 0;
   for (uint8_t i = 0; i < IBUS_FRAME_LEN - 2; i++) sum += ibusBuf[i];
   uint16_t chk = ibusBuf[30] | (ibusBuf[31] << 8);
@@ -146,13 +145,27 @@ bool ibusChannelsOk() {
   return true;
 }
 
-// Returns true once per complete, checksum-valid frame. A rejected frame
-// (misaligned stream or corrupted bytes) resyncs on a later header+checksum.
+// Byte-wise state machine: hunts for the 0x20 0x40 header, collects 32 bytes,
+// verifies the checksum. A corrupted or misaligned stream re-syncs within one
+// frame (~7 ms) instead of staying stuck a fixed offset off the frame boundary.
 bool ibusUpdate() {
   bool fresh = false;
   while (ibusSerial.available()) {
-    ibusBuf[ibusPos++] = ibusSerial.read();
+    uint8_t b = ibusSerial.read();
+
+    if (ibusPos == 0) {                 // hunting for header byte 1
+      if (b == 0x20) ibusBuf[ibusPos++] = b;
+      continue;
+    }
+    if (ibusPos == 1) {                 // expecting header byte 2
+      if (b == 0x40) ibusBuf[ibusPos++] = b;
+      else if (b != 0x20) ibusPos = 0;  // another 0x20 keeps the candidate alive
+      continue;
+    }
+
+    ibusBuf[ibusPos++] = b;             // payload + checksum bytes
     if (ibusPos < IBUS_FRAME_LEN) continue;
+
     ibusPos = 0;
     if (ibusFrameOk()) {
       for (uint8_t i = 0; i < IBUS_NUM_CH; i++) {

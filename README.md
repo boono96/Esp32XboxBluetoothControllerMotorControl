@@ -69,10 +69,10 @@ FlySky TX -> receiver -> IBUS (UART, 115200) -> channel values -> deadzone/expo 
     -> slew limiter -> sign-magnitude output (PWM + DIR) -> MD10C -> motors
 ```
 
-1. **IBUS input**: the receiver streams 32-byte frames at 115200 baud 8N1 every ~7 ms. Each frame holds 14 channels as little-endian values (1000–2000, center 1500) plus a 16-bit checksum (`0xFFFF − sum of first 30 bytes`). The parser validates the header and checksum, so a glitched or misaligned stream resyncs automatically.
-2. **Channel mapping** (FlySky Mode 2 transmitter defaults, configurable at the top of the sketch):
-   - **CH1** (right stick X) → **steering** (left / right)
-   - **CH3** (left stick Y) → **throttle** (forward / reverse)
+1. **IBUS input**: the receiver streams 32-byte frames at 115200 baud 8N1 every ~7 ms. Each frame holds 14 channels as little-endian values (1000–2000, center 1500) plus a 16-bit checksum (`0xFFFF − sum of first 30 bytes`). The parser is a byte-wise state machine that hunts for the `0x20 0x40` header, so it syncs within one frame (~7 ms) even if the ESP32 boots mid-stream, and the checksum drops corrupted frames.
+2. **Channel mapping** (FlySky Mode 2 transmitter, throttle/steering swapped — configurable at the top of the sketch):
+   - **CH1** (right stick X) → **throttle** (forward / reverse)
+   - **CH3** (left stick Y) → **steering** (left / right)
 3. **Deadzone + expo**: an 8 % deadband around center removes idle noise (rescaled so full stick still equals full output), then a 1.6-power expo curve makes the robot less twitchy around center.
 4. **Arcade mixing** converts throttle + steering into per-wheel speeds:
    ```
@@ -97,7 +97,7 @@ Each half of the PWM period the H-bridge applies either +V (forward) or −V (re
 
 | Constant | Default | Effect |
 |---|---|---|
-| `STEERING_CH` / `THROTTLE_CH` | CH1 / CH3 | Remap which receiver channel drives steering / throttle. |
+| `STEERING_CH` / `THROTTLE_CH` | CH3 / CH1 | Remap which receiver channel drives steering / throttle. |
 | `DEADZONE` | 0.08 | Stick idle band (0–1). Raise if the robot creeps. |
 | `EXPO` | 1.6 | >1 = softer around center, 1.0 = fully linear. |
 | `SLEW_PER_SEC` | 6.0 | Max output change per second. Raise to 50+ for near-instant response. |
@@ -118,6 +118,7 @@ Each half of the PWM period the H-bridge applies either +V (forward) or −V (re
 - **"no IBUS frames" on serial** → check the receiver has 5 V power, GND is common with the ESP32, and the **I-BUS SERVO** pin (not SENS/PPM/S.BUS) goes to GPIO 16. Confirm the transmitter is on and bound.
 - **Sticks move but one axis dead** → you may have bound a PPM/S.BUS output or the channel map differs; watch the CH1–CH4 values in the serial monitor while moving each stick and adjust `STEERING_CH` / `THROTTLE_CH` accordingly.
 - **Values jump / robot glitches** → check the receiver's ground connection and keep the IBUS wire short; the checksum validator drops corrupted frames, but a missing ground causes constant drops.
+- **Worked only intermittently (e.g. came alive when the MD10C test button ran the motor)** → the old fixed-window parser could get stuck misaligned in the continuous IBUS stream, and electrical noise knocking bytes loose was the only thing that resynced it. The header-hunting parser fixes this; if it ever recurs, treat it as a wiring/ground problem, not a software one.
 - **TX lost with receiver still powered** → the sketch times out and stops the motors after 300 ms. For receivers that *hold* the last frame instead of stopping output, also set per-channel failsafe values on the transmitter (center = 1500).
 - **`ledcAttach failed`** → you're on arduino-esp32 core 2.x; the sketch auto-falls back to the core 2.x `ledcSetup/ledcAttachPin` API — see the note at the top of the sketch.
 - **Robot twitches with sticks centered** → raise `DEADZONE`, or increase the transmitter's stick-center trim.
