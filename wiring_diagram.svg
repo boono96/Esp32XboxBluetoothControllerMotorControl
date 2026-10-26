@@ -154,4 +154,5 @@
   <text x="580" y="765" font-size="12" fill="#475569">Note 1: input side is opto-isolated — ESP32 GND goes to MD10C input GND, battery − to MD10C power GND.</text>
   <text x="580" y="785" font-size="12" fill="#475569">Note 2: MD10C VCC ← ESP32 3V3 (Rev2+ inputs are 3.3 V tolerant). Do not use ANTIPHASE jumper position.</text>
   <text x="580" y="805" font-size="12" fill="#475569">Note 3: FlySky receiver — 5 V from a BEC (4–8.4 V), GND common with ESP32; use the I-BUS SERVO pin (SENS is telemetry).</text>
+  <text x="580" y="825" font-size="12" fill="#475569">Note 4: if the motors jerk at power-on, add 10 kΩ pull-downs on the 4 MD10C inputs (ESP32 side) — ESP32 pins float during boot.</text>
 </svg>

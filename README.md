@@ -35,6 +35,7 @@ Drives a two-wheel differential-drive robot from a **FlySky RC receiver** (read 
 | VCC (input side) | ESP32 3V3 (MD10C Rev2+ inputs are 3.3 V tolerant) |
 
 - Keep the MD10C mode jumper in the **factory position (PWM+DIR)**, **not** "ANTIPHASE".
+- **Motor jerks at power-on?** Add a **10 kΩ pull-down resistor** from each MD10C input (PWM and DIR, ESP32 side) to GND — 4 resistors total. ESP32 pins float (high-Z) during the ~100 ms boot window before `setup()` runs, and a floating opto input can be read as a signal. The sketch already drives the pins LOW as its first act, but it can't act before boot; the resistors cover that window.
 - Motor power (batteries) goes to the MD10C Vmotor / M1 / M2 terminals as usual.
 - 0 % PWM = coast — the MD10C has no active brake input in this mode.
 

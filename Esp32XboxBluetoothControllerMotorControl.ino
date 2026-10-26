@@ -72,8 +72,12 @@ uint32_t lastPacketMs = 0;
 // ---------------- PWM helpers ----------------
 // arduino-esp32 core 2.x configures LEDC per channel; core 3.x attaches per pin.
 // Both produce the same 20 kHz / 11-bit output.
+// pwmBegin drives the pin LOW via pinMode first: ESP32 pins float (high-Z) during
+// boot until setup() runs, and a floating MD10C opto input can twitch the motor.
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
 void pwmBegin(const Motor& m) {
+  pinMode(m.pwmPin, OUTPUT);
+  digitalWrite(m.pwmPin, LOW);
   if (!ledcAttach(m.pwmPin, PWM_FREQ_HZ, PWM_RES_BITS)) {
     Serial.printf("ledcAttach failed on pin %d\n", m.pwmPin);
   }
@@ -82,9 +86,11 @@ void pwmBegin(const Motor& m) {
 void pwmWrite(const Motor& m, uint32_t duty) { ledcWrite(m.pwmPin, duty); }
 #else
 void pwmBegin(const Motor& m) {
+  pinMode(m.pwmPin, OUTPUT);
+  digitalWrite(m.pwmPin, LOW);
   ledcSetup(m.pwmCh, PWM_FREQ_HZ, PWM_RES_BITS);
+  ledcWrite(m.pwmCh, 0);           // zero duty before routing the pin to LEDC
   ledcAttachPin(m.pwmPin, m.pwmCh);
-  ledcWrite(m.pwmCh, 0);
 }
 void pwmWrite(const Motor& m, uint32_t duty) { ledcWrite(m.pwmCh, duty); }
 #endif
